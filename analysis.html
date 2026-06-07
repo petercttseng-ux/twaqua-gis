@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>水產養殖統計分析儀表板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+/* ── Reset & Base ── */
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;background:#0a0f1e;color:#e2e8f0;font-family:'Microsoft JhengHei','微軟正黑體',sans-serif;}
+
+/* ── Header ── */
+#hdr{
+  background:linear-gradient(135deg,#0f3460,#16213e);
+  padding:12px 24px; display:flex; align-items:center; gap:12px;
+  border-bottom:2px solid #0d7377; position:sticky; top:0; z-index:100;
+  box-shadow:0 2px 16px rgba(0,0,0,.6);
+}
+#hdr img{height:40px;background:#fff;padding:3px 5px;border-radius:4px;flex-shrink:0;}
+#hdr h1{font-size:17px;font-weight:700;color:#2dd4bf;}
+#hdr .sub{font-size:11px;color:#64748b;margin-top:2px;}
+#hdr .nav{margin-left:auto;display:flex;gap:8px;}
+#hdr .nav a{
+  padding:7px 14px;border:1px solid #334155;border-radius:6px;
+  color:#94a3b8;font-size:12px;text-decoration:none;transition:all .2s;
+}
+#hdr .nav a:hover,#hdr .nav a.active{background:#0d7377;border-color:#2dd4bf;color:#fff;}
+
+/* ── Layout ── */
+#wrap{max-width:1400px;margin:0 auto;padding:20px 20px 40px;}
+
+/* ── Loading ── */
+#loading{position:fixed;inset:0;background:rgba(10,15,30,.9);display:flex;align-items:center;
+  justify-content:center;flex-direction:column;gap:12px;z-index:999;}
+.spinner{width:44px;height:44px;border:4px solid #1e293b;border-top-color:#2dd4bf;
+  border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{color:#2dd4bf;font-size:14px;}
+
+/* ── KPI Cards ── */
+#kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;}
+.kcard{
+  background:linear-gradient(135deg,#1e293b,#16213e);
+  border:1px solid #1e3a5f;border-radius:12px;padding:16px 14px;
+  transition:border-color .2s,transform .2s;cursor:default;
+}
+.kcard:hover{border-color:#2dd4bf;transform:translateY(-2px);}
+.kcard .kicon{font-size:24px;margin-bottom:8px;}
+.kcard .kval{font-size:22px;font-weight:700;color:#2dd4bf;margin-bottom:2px;}
+.kcard .klbl{font-size:11px;color:#64748b;}
+.kcard .kunit{font-size:10px;color:#475569;margin-top:2px;}
+
+/* ── Section Title ── */
+.sec-title{
+  font-size:14px;font-weight:700;color:#2dd4bf;
+  text-transform:uppercase;letter-spacing:1.5px;
+  margin:28px 0 14px;padding-bottom:8px;
+  border-bottom:1px solid #1e2d47;
+  display:flex;align-items:center;gap:8px;
+}
+.sec-title::before{content:'';display:block;width:4px;height:18px;background:#0d7377;border-radius:2px;}
+
+/* ── Chart Grid ── */
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:16px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;}
+.grid-auto{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px;margin-bottom:16px;}
+
+/* ── Chart Card ── */
+.ccard{
+  background:#111827;border:1px solid #1e2d47;border-radius:12px;
+  padding:18px;transition:border-color .2s;
+}
+.ccard:hover{border-color:#2dd4bf;}
+.ccard.tall{min-height:420px;}
+.ccard.xtall{min-height:520px;}
+.ccard h3{font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:4px;}
+.ccard .desc{font-size:11px;color:#475569;margin-bottom:14px;}
+.chart-wrap{position:relative;}
+
+/* ── Heatmap ── */
+.heatmap-wrap{overflow-x:auto;}
+.heatmap{border-collapse:collapse;width:100%;font-size:11px;}
+.heatmap th{
+  background:#0f172a;color:#64748b;padding:5px 8px;text-align:center;
+  font-weight:600;border:1px solid #1e2d47;white-space:nowrap;position:sticky;top:0;
+}
+.heatmap td{
+  padding:5px 7px;text-align:center;border:1px solid #1a2540;
+  font-size:10px;white-space:nowrap;transition:opacity .2s;
+}
+.heatmap td:hover{opacity:.8;outline:2px solid #2dd4bf;}
+.heatmap .row-lbl{text-align:left;font-weight:600;color:#cbd5e1;background:#0f172a;padding:5px 10px;}
+
+/* ── Insight Box ── */
+.insight{
+  background:linear-gradient(135deg,#0d3460,#0f3a4a);
+  border:1px solid #0d7377;border-radius:10px;
+  padding:16px 18px;margin-bottom:16px;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;
+}
+.ins-item{display:flex;align-items:flex-start;gap:8px;}
+.ins-icon{font-size:20px;flex-shrink:0;margin-top:2px;}
+.ins-text .ins-lbl{font-size:11px;color:#64748b;margin-bottom:2px;}
+.ins-text .ins-val{font-size:13px;color:#e2e8f0;font-weight:600;}
+
+/* ── Rank Table ── */
+.rank-tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.rank-tbl th{background:#0f172a;color:#64748b;padding:8px 10px;text-align:left;font-size:11px;font-weight:600;border-bottom:1px solid #1e2d47;}
+.rank-tbl td{padding:8px 10px;border-bottom:1px solid #1a2540;color:#cbd5e1;}
+.rank-tbl tr:hover td{background:#1e293b;}
+.rank-badge{display:inline-block;width:20px;height:20px;border-radius:50%;text-align:center;line-height:20px;font-size:10px;font-weight:700;margin-right:6px;}
+.rb-gold{background:#b7791f;color:#fff;}
+.rb-silver{background:#6b7280;color:#fff;}
+.rb-bronze{background:#92400e;color:#fff;}
+.rb-other{background:#1e3a5f;color:#94a3b8;}
+
+/* ── Bar fill ── */
+.bar-fill-wrap{background:#1e2d47;border-radius:3px;height:6px;flex:1;}
+.bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#0d7377,#2dd4bf);}
+
+@media(max-width:900px){
+  .grid-2,.grid-3{grid-template-columns:1fr;}
+  .grid-auto{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading"><div class="spinner"></div><div class="loading-text">載入與解析資料中…</div></div>
+
+<!-- Header -->
+<div id="hdr">
+  <img src="https://www.tfrin.gov.tw/upload/tfrin/images/web_structure/174/fb098551-7645-457b-a0b4-18e74c6c14ea.jpg" alt="TFRI" onerror="this.style.display='none'">
+  <div>
+    <h1>水產養殖統計分析儀表板</h1>
+    <div class="sub">農業部水產試驗所 ｜ FaRSS139 深度解析</div>
+  </div>
+  <nav class="nav">
+    <a href="aquaculture-gis.html">🗺 GIS 地圖</a>
+    <a href="analysis.html" class="active">📊 統計分析</a>
+  </nav>
+</div>
+
+<div id="wrap">
+
+  <!-- KPI 摘要 -->
+  <div id="kpi"></div>
+
+  <!-- 洞察摘要 -->
+  <div class="insight" id="insight-box"></div>
+
+  <!-- ① 魚種分布 -->
+  <div class="sec-title">① 魚種別分布概況</div>
+  <div class="grid-2">
+    <div class="ccard tall">
+      <h3>各魚種養殖面積佔比</h3>
+      <div class="desc">全臺各魚種魚塭面積（公頃）在總面積中的比例</div>
+      <div class="chart-wrap"><canvas id="c-area-donut"></canvas></div>
+    </div>
+    <div class="ccard tall">
+      <h3>各魚種在池數量</h3>
+      <div class="desc">各魚種目前在池中的養殖數量（尾／粒／隻）</div>
+      <div class="chart-wrap"><canvas id="c-stock-bar"></canvas></div>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="ccard">
+      <h3>各魚種養殖戶數</h3>
+      <div class="desc">各魚種的養殖業者戶數</div>
+      <div class="chart-wrap"><canvas id="c-farmers-bar"></canvas></div>
+    </div>
+    <div class="ccard">
+      <h3>各魚種魚塭口數</h3>
+      <div class="desc">已完成調查的魚塭口數（口）</div>
+      <div class="chart-wrap"><canvas id="c-ponds-bar"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ② 養殖階段 -->
+  <div class="sec-title">② 養殖階段結構分析</div>
+  <div class="grid-2">
+    <div class="ccard tall">
+      <h3>各魚種養殖階段口數結構</h3>
+      <div class="desc">魚苗培育 / 種魚繁殖 / 中間養殖 / 成魚養成 各階段魚塭口數</div>
+      <div class="chart-wrap"><canvas id="c-stage-stack"></canvas></div>
+    </div>
+    <div class="ccard tall">
+      <h3>魚苗戶 vs 養成戶比例</h3>
+      <div class="desc">各魚種養殖業者中，以魚苗培育為主 vs 以成魚養成為主的比例</div>
+      <div class="chart-wrap"><canvas id="c-hatchery-donut"></canvas></div>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="ccard">
+      <h3>各魚種成魚面積 vs 在池量</h3>
+      <div class="desc">成魚養成階段魚塭面積（公頃）與在池數量關係</div>
+      <div class="chart-wrap"><canvas id="c-scatter"></canvas></div>
+    </div>
+    <div class="ccard">
+      <h3>各魚種在池密度</h3>
+      <div class="desc">每公頃魚塭平均在池數量（尾／粒／隻 per 公頃）</div>
+      <div class="chart-wrap"><canvas id="c-density-bar"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ③ 縣市分析 -->
+  <div class="sec-title">③ 縣市別養殖分布分析</div>
+  <div class="grid-2">
+    <div class="ccard">
+      <h3>縣市養殖面積排行</h3>
+      <div class="desc">各縣市魚塭面積（公頃）排名</div>
+      <div class="chart-wrap"><canvas id="c-county-area"></canvas></div>
+    </div>
+    <div class="ccard">
+      <h3>縣市養殖戶數排行</h3>
+      <div class="desc">各縣市養殖業者戶數排名</div>
+      <div class="chart-wrap"><canvas id="c-county-farmers"></canvas></div>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="ccard">
+      <h3>縣市魚種多樣性</h3>
+      <div class="desc">各縣市有記錄的養殖魚種種數</div>
+      <div class="chart-wrap"><canvas id="c-county-diversity"></canvas></div>
+    </div>
+    <div class="ccard">
+      <h3>縣市在池數量排行</h3>
+      <div class="desc">各縣市養殖在池總量（億尾／粒／隻）</div>
+      <div class="chart-wrap"><canvas id="c-county-stock"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ④ 水權類別 -->
+  <div class="sec-title">④ 水權類別結構分析</div>
+  <div class="grid-2">
+    <div class="ccard tall">
+      <h3>各魚種水權類別口數結構</h3>
+      <div class="desc">第一類（有水權）/ 第一類（無水權）/ 第二類 / 第三類 魚塭口數分布</div>
+      <div class="chart-wrap"><canvas id="c-water-stack"></canvas></div>
+    </div>
+    <div class="ccard tall">
+      <h3>各魚種水權類別戶數結構</h3>
+      <div class="desc">養殖戶依水權類別的分布比例</div>
+      <div class="chart-wrap"><canvas id="c-water-farmer-stack"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ⑤ 熱力圖 -->
+  <div class="sec-title">⑤ 魚種 × 縣市 交叉熱力圖</div>
+  <div class="ccard">
+    <h3>各縣市各魚種養殖面積（公頃）</h3>
+    <div class="desc">顏色愈深代表養殖面積愈大；點擊儲存格可查看數值</div>
+    <div class="heatmap-wrap"><table class="heatmap" id="heatmap"></table></div>
+  </div>
+
+  <!-- ⑥ 綜合排行 -->
+  <div class="sec-title">⑥ 綜合排行榜</div>
+  <div class="grid-2">
+    <div class="ccard">
+      <h3>主力魚種綜合排行</h3>
+      <div class="desc">依魚塭面積排行，含各項核心指標</div>
+      <table class="rank-tbl" id="rank-species"></table>
+    </div>
+    <div class="ccard">
+      <h3>主要養殖縣市排行</h3>
+      <div class="desc">依魚塭面積排行，含各項核心指標</div>
+      <table class="rank-tbl" id="rank-county"></table>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<script>
+// ══════════════════════════════════════
+//  設定
+// ══════════════════════════════════════
+const API = 'https://data.moa.gov.tw/Service/OpenData/FaRss/FaRSS139.aspx?IsTransData=1&UnitId=G70';
+
+const CODE2NAME = {
+  '63000':'臺北市','65000':'新北市','66000':'臺中市','67000':'臺南市',
+  '68000':'桃園市','64000':'高雄市','10002':'宜蘭縣','10004':'新竹縣',
+  '10005':'苗栗縣','10007':'彰化縣','10008':'南投縣','10009':'雲林縣',
+  '10010':'嘉義縣','10013':'屏東縣','10014':'臺東縣','10015':'花蓮縣',
+  '10016':'澎湖縣','10017':'基隆市','10018':'新竹市','10020':'嘉義市',
+  '09007':'金門縣','09020':'連江縣'
+};
+
+// 色彩系統
+const PALETTE = [
+  '#2dd4bf','#38bdf8','#a78bfa','#fb923c','#34d399','#f472b6',
+  '#facc15','#60a5fa','#f87171','#4ade80'
+];
+const STAGE_COLORS = {
+  '魚苗培育':'#2dd4bf','種魚繁殖':'#38bdf8','中間養殖':'#a78bfa','成魚養成':'#fb923c'
+};
+const WATER_COLORS = {
+  '第一類(有水權)':'#2dd4bf','第一類(無水權)':'#38bdf8','第二類':'#fb923c','第三類':'#94a3b8'
+};
+
+// Chart.js 預設主題
+Chart.defaults.color = '#64748b';
+Chart.defaults.font.family = "'Microsoft JhengHei', sans-serif";
+Chart.defaults.font.size = 11;
+Chart.defaults.plugins.legend.labels.padding = 14;
+Chart.defaults.plugins.legend.labels.boxWidth = 12;
+Chart.defaults.plugins.legend.labels.color = '#94a3b8';
+
+const GRID = { color: '#1e2d47', drawBorder: false };
+const TICK = { color: '#475569' };
+
+// ══════════════════════════════════════
+//  格式化
+// ══════════════════════════════════════
+function fmt(n, dec=0){ return Number(n).toLocaleString('zh-TW',{maximumFractionDigits:dec,minimumFractionDigits:dec}); }
+function fmtShort(n){
+  if(n>=1e8) return (n/1e8).toFixed(1)+'億';
+  if(n>=1e4) return (n/1e4).toFixed(1)+'萬';
+  return fmt(n);
+}
+function num(r,k){ return parseFloat(r[k])||0; }
+
+// ══════════════════════════════════════
+//  資料聚合
+// ══════════════════════════════════════
+function buildSpeciesMap(rows){
+  const m={};
+  rows.forEach(r=>{
+    const s=r['魚種別'];
+    if(!m[s]) m[s]={
+      area:0,stock:0,farmers:0,ponds:0,
+      fry_ponds:0,breed_ponds:0,mid_ponds:0,adult_ponds:0,
+      adult_area:0,adult_stock:0,
+      w1y_ponds:0,w1n_ponds:0,w2_ponds:0,w3_ponds:0,
+      w1y_farmers:0,w1n_farmers:0,w2_farmers:0,w3_farmers:0,
+      hatchery_farmers:0,adult_farmers:0, records:[]
+    };
+    m[s].area    += num(r,'魚塭面積(公頃)-小計');
+    m[s].stock   += num(r,'放養量-在池(尾、粒、隻)');
+    m[s].farmers += num(r,'養殖戶數-小計');
+    m[s].ponds   += num(r,'已完成調查魚塭口數-小計');
+    m[s].fry_ponds   += num(r,'魚苗培育-魚塭口數');
+    m[s].breed_ponds += num(r,'種魚繁殖-魚塭口數');
+    m[s].mid_ponds   += num(r,'中間養殖-魚塭口數');
+    m[s].adult_ponds += num(r,'成魚養成-魚塭口數');
+    m[s].adult_area  += num(r,'成魚養成-魚塭面積(公頃)');
+    m[s].adult_stock += num(r,'成魚養成-在池');
+    m[s].w1y_ponds   += num(r,'已完成調查魚塭口數-第一類(有水權)');
+    m[s].w1n_ponds   += num(r,'已完成調查魚塭口數-第一類(無水權)');
+    m[s].w2_ponds    += num(r,'已完成調查魚塭口數-第二類');
+    m[s].w3_ponds    += num(r,'已完成調查魚塭口數-第三類');
+    m[s].w1y_farmers += num(r,'養殖戶數-第一類(有水權)');
+    m[s].w1n_farmers += num(r,'養殖戶數-第一類(無水權)');
+    m[s].w2_farmers  += num(r,'養殖戶數-第二類');
+    m[s].w3_farmers  += num(r,'養殖戶數-第三類');
+    m[s].hatchery_farmers += num(r,'養殖戶類別統計-魚苗戶');
+    m[s].adult_farmers    += num(r,'養殖戶類別統計-養成戶');
+    m[s].records.push(r);
+  });
+  return m;
+}
+
+function buildCountyMap(rows){
+  const m={};
+  rows.forEach(r=>{
+    const c=r['所屬縣市'];
+    if(!m[c]) m[c]={area:0,stock:0,farmers:0,ponds:0,species:new Set()};
+    m[c].area    += num(r,'魚塭面積(公頃)-小計');
+    m[c].stock   += num(r,'放養量-在池(尾、粒、隻)');
+    m[c].farmers += num(r,'養殖戶數-小計');
+    m[c].ponds   += num(r,'已完成調查魚塭口數-小計');
+    m[c].species.add(r['魚種別']);
+  });
+  Object.values(m).forEach(v=>{ v.diversity=v.species.size; });
+  return m;
+}
+
+// ══════════════════════════════════════
+//  圖表建立
+// ══════════════════════════════════════
+function makeChart(id, type, data, options={}){
+  const ctx=document.getElementById(id).getContext('2d');
+  return new Chart(ctx,{type,data,options:{responsive:true,maintainAspectRatio:true,...options}});
+}
+
+function hbarOptions(xLabel='', xFmt=v=>fmtShort(v)){
+  return {
+    indexAxis:'y',
+    plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:'#64748b',
+      font:{size:10},formatter:xFmt}},
+    scales:{
+      x:{grid:GRID,ticks:{...TICK,callback:xFmt}},
+      y:{grid:{display:false},ticks:{...TICK,font:{size:11}}}
+    }
+  };
+}
+
+function vbarOptions(yFmt=v=>fmtShort(v)){
+  return {
+    plugins:{legend:{display:false},datalabels:{anchor:'end',align:'top',color:'#64748b',font:{size:10},formatter:yFmt}},
+    scales:{
+      x:{grid:{display:false},ticks:TICK},
+      y:{grid:GRID,ticks:{...TICK,callback:yFmt}}
+    }
+  };
+}
+
+// ── 顏色插值（熱力圖用）──
+function heatColor(val, max){
+  if(!val) return '#0f172a';
+  const t=Math.sqrt(val/max);
+  const r=Math.round(13+(45-13)*t);
+  const g=Math.round(23+(115-23)*t);
+  const b=Math.round(42+(119-42)*t);
+  return `rgb(${r},${g},${b})`;
+}
+
+// ══════════════════════════════════════
+//  主程式
+// ══════════════════════════════════════
+async function main(){
+  const res=await fetch(API);
+  const rows=await res.json();
+  const SM=buildSpeciesMap(rows);
+  const CM=buildCountyMap(rows);
+
+  const species=Object.keys(SM).sort((a,b)=>SM[b].area-SM[a].area);
+  const counties=Object.keys(CM).sort((a,b)=>CM[b].area-CM[a].area);
+
+  // ── KPI ──
+  const totArea   = species.reduce((s,k)=>s+SM[k].area,0);
+  const totStock  = species.reduce((s,k)=>s+SM[k].stock,0);
+  const totFarmers= species.reduce((s,k)=>s+SM[k].farmers,0);
+  const totPonds  = species.reduce((s,k)=>s+SM[k].ponds,0);
+
+  const kpis=[
+    {icon:'🗺',val:fmt(totArea,1),lbl:'總魚塭面積',unit:'公頃'},
+    {icon:'🏊',val:fmt(totPonds),lbl:'總魚塭口數',unit:'口'},
+    {icon:'👨‍🌾',val:fmt(totFarmers),lbl:'總養殖戶數',unit:'戶'},
+    {icon:'🐟',val:fmtShort(totStock),lbl:'在池總數量',unit:'尾／粒／隻'},
+    {icon:'🌏',val:counties.length,lbl:'養殖縣市',unit:'個'},
+    {icon:'🐡',val:species.length,lbl:'養殖魚種',unit:'種'},
+    {icon:'📋',val:rows.length,lbl:'資料筆數',unit:'筆'},
+    {icon:'📏',val:fmt(totArea/totPonds,3),lbl:'平均每口面積',unit:'公頃／口'},
+  ];
+  document.getElementById('kpi').innerHTML=kpis.map(k=>`
+    <div class="kcard">
+      <div class="kicon">${k.icon}</div>
+      <div class="kval">${k.val}</div>
+      <div class="klbl">${k.lbl}</div>
+      <div class="kunit">${k.unit}</div>
+    </div>`).join('');
+
+  // ── 洞察 ──
+  const topAreaSpecies=species[0], topFarmerSpecies=[...species].sort((a,b)=>SM[b].farmers-SM[a].farmers)[0];
+  const topAreaCounty=counties[0], topStockSpecies=[...species].sort((a,b)=>SM[b].stock-SM[a].stock)[0];
+  document.getElementById('insight-box').innerHTML=`
+    <div class="ins-item"><div class="ins-icon">🏆</div><div class="ins-text">
+      <div class="ins-lbl">面積最大魚種</div>
+      <div class="ins-val">${topAreaSpecies}（${fmt(SM[topAreaSpecies].area,1)} 公頃，佔 ${(SM[topAreaSpecies].area/totArea*100).toFixed(1)}%）</div>
+    </div></div>
+    <div class="ins-item"><div class="ins-icon">🌊</div><div class="ins-text">
+      <div class="ins-lbl">在池量最大魚種</div>
+      <div class="ins-val">${topStockSpecies}（${fmtShort(SM[topStockSpecies].stock)} 尾/粒/隻）</div>
+    </div></div>
+    <div class="ins-item"><div class="ins-icon">🏭</div><div class="ins-text">
+      <div class="ins-lbl">養殖戶最多魚種</div>
+      <div class="ins-val">${topFarmerSpecies}（${fmt(SM[topFarmerSpecies].farmers)} 戶）</div>
+    </div></div>
+    <div class="ins-item"><div class="ins-icon">📍</div><div class="ins-text">
+      <div class="ins-lbl">養殖面積最大縣市</div>
+      <div class="ins-val">${CODE2NAME[topAreaCounty]}（${fmt(CM[topAreaCounty].area,1)} 公頃，${CM[topAreaCounty].diversity} 種魚種）</div>
+    </div></div>
+  `;
+
+  // ──────────────────────────────────────
+  //  ① 魚種面積 Donut
+  // ──────────────────────────────────────
+  makeChart('c-area-donut','doughnut',{
+    labels:species,
+    datasets:[{data:species.map(s=>SM[s].area),backgroundColor:PALETTE,borderWidth:1,borderColor:'#0a0f1e'}]
+  },{
+    cutout:'62%',
+    plugins:{
+      legend:{position:'right',labels:{color:'#94a3b8',font:{size:11}}},
+      datalabels:{display:ctx=>SM[species[ctx.dataIndex]].area/totArea>0.04,
+        formatter:(v,ctx)=>species[ctx.dataIndex]+'\n'+fmt(v,0)+'ha',
+        color:'#fff',font:{size:9,weight:'bold'},textAlign:'center'}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ① 在池數量 H-Bar
+  // ──────────────────────────────────────
+  const stkSorted=[...species].sort((a,b)=>SM[b].stock-SM[a].stock);
+  makeChart('c-stock-bar','bar',{
+    labels:stkSorted,
+    datasets:[{
+      data:stkSorted.map(s=>SM[s].stock),
+      backgroundColor:stkSorted.map((_,i)=>PALETTE[i%PALETTE.length]),
+      borderRadius:4,
+    }]
+  },{
+    indexAxis:'y',
+    plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:'#64748b',font:{size:10},formatter:v=>fmtShort(v)}},
+    scales:{
+      x:{grid:GRID,ticks:{...TICK,callback:v=>fmtShort(v)}},
+      y:{grid:{display:false},ticks:TICK}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ① 養殖戶數 Bar
+  // ──────────────────────────────────────
+  const frmSorted=[...species].sort((a,b)=>SM[b].farmers-SM[a].farmers);
+  makeChart('c-farmers-bar','bar',{
+    labels:frmSorted,
+    datasets:[{data:frmSorted.map(s=>SM[s].farmers),backgroundColor:PALETTE,borderRadius:4}]
+  },vbarOptions());
+
+  // ──────────────────────────────────────
+  //  ① 魚塭口數 Bar
+  // ──────────────────────────────────────
+  const pndSorted=[...species].sort((a,b)=>SM[b].ponds-SM[a].ponds);
+  makeChart('c-ponds-bar','bar',{
+    labels:pndSorted,
+    datasets:[{data:pndSorted.map(s=>SM[s].ponds),backgroundColor:PALETTE,borderRadius:4}]
+  },vbarOptions());
+
+  // ──────────────────────────────────────
+  //  ② 養殖階段 Stacked Bar
+  // ──────────────────────────────────────
+  makeChart('c-stage-stack','bar',{
+    labels:species,
+    datasets:[
+      {label:'魚苗培育',data:species.map(s=>SM[s].fry_ponds),  backgroundColor:STAGE_COLORS['魚苗培育'],  borderRadius:2},
+      {label:'種魚繁殖',data:species.map(s=>SM[s].breed_ponds),backgroundColor:STAGE_COLORS['種魚繁殖'], borderRadius:2},
+      {label:'中間養殖',data:species.map(s=>SM[s].mid_ponds),  backgroundColor:STAGE_COLORS['中間養殖'],  borderRadius:2},
+      {label:'成魚養成',data:species.map(s=>SM[s].adult_ponds),backgroundColor:STAGE_COLORS['成魚養成'], borderRadius:2},
+    ]
+  },{
+    scales:{
+      x:{stacked:true,grid:{display:false},ticks:TICK},
+      y:{stacked:true,grid:GRID,ticks:{...TICK,callback:v=>fmtShort(v)}}
+    },
+    plugins:{
+      legend:{labels:{color:'#94a3b8'}},
+      datalabels:{display:false}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ② 魚苗戶 vs 養成戶 Donut
+  // ──────────────────────────────────────
+  const hatTotal=species.reduce((s,k)=>s+SM[k].hatchery_farmers,0);
+  const adultTotal=species.reduce((s,k)=>s+SM[k].adult_farmers,0);
+  makeChart('c-hatchery-donut','doughnut',{
+    labels:species,
+    datasets:[
+      {label:'魚苗戶',data:species.map(s=>SM[s].hatchery_farmers),backgroundColor:PALETTE,borderWidth:1,borderColor:'#0a0f1e'},
+      {label:'養成戶',data:species.map(s=>SM[s].adult_farmers),backgroundColor:PALETTE.map(c=>c+'99'),borderWidth:1,borderColor:'#0a0f1e'},
+    ]
+  },{
+    cutout:'50%',
+    plugins:{
+      legend:{display:true,position:'right',labels:{color:'#94a3b8',font:{size:10}}},
+      datalabels:{display:false},
+      tooltip:{callbacks:{label:ctx=>{
+        const s=species[ctx.dataIndex];
+        return ctx.dataset.label+': '+fmt(ctx.raw)+'戶';
+      }}}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ② 成魚面積 vs 在池量 Scatter
+  // ──────────────────────────────────────
+  makeChart('c-scatter','scatter',{
+    datasets:[{
+      data:species.map(s=>({x:SM[s].adult_area, y:SM[s].adult_stock/1e6, label:s})),
+      pointBackgroundColor:species.map((_,i)=>PALETTE[i%PALETTE.length]),
+      pointRadius:species.map(s=>Math.max(6,Math.min(22,SM[s].farmers/80))),
+      pointHoverRadius:20,
+    }]
+  },{
+    plugins:{
+      legend:{display:false},
+      datalabels:{
+        display:true,
+        formatter:(_,ctx)=>ctx.chart.data.datasets[0].data[ctx.dataIndex].label,
+        color:'#e2e8f0',font:{size:10},offset:8,align:'top'
+      },
+      tooltip:{callbacks:{
+        label:ctx=>{
+          const d=ctx.raw;
+          return `${d.label}：成魚面積 ${fmt(d.x,1)}ha，在池 ${fmtShort(d.y*1e6)}`;
+        }
+      }}
+    },
+    scales:{
+      x:{grid:GRID,ticks:TICK,title:{display:true,text:'成魚養成面積（公頃）',color:'#475569'}},
+      y:{grid:GRID,ticks:TICK,title:{display:true,text:'成魚在池量（百萬）',color:'#475569'}}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ② 在池密度 Bar
+  // ──────────────────────────────────────
+  const densitySorted=[...species]
+    .filter(s=>SM[s].area>0)
+    .sort((a,b)=>(SM[b].stock/SM[b].area)-(SM[a].stock/SM[a].area));
+  makeChart('c-density-bar','bar',{
+    labels:densitySorted,
+    datasets:[{
+      data:densitySorted.map(s=>SM[s].stock/SM[s].area),
+      backgroundColor:densitySorted.map((_,i)=>PALETTE[i%PALETTE.length]),
+      borderRadius:4
+    }]
+  },{
+    indexAxis:'y',
+    plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:'#64748b',font:{size:10},formatter:v=>fmtShort(v)}},
+    scales:{
+      x:{grid:GRID,ticks:{...TICK,callback:v=>fmtShort(v)}},
+      y:{grid:{display:false},ticks:TICK}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ③ 縣市面積 H-Bar
+  // ──────────────────────────────────────
+  makeChart('c-county-area','bar',{
+    labels:counties.map(c=>CODE2NAME[c]||c),
+    datasets:[{
+      data:counties.map(c=>CM[c].area),
+      backgroundColor:counties.map((_,i)=>PALETTE[i%PALETTE.length]),
+      borderRadius:4
+    }]
+  },{
+    indexAxis:'y',
+    plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:'#64748b',font:{size:10},formatter:v=>fmt(v,0)+'ha'}},
+    scales:{
+      x:{grid:GRID,ticks:{...TICK,callback:v=>fmt(v,0)}},
+      y:{grid:{display:false},ticks:TICK}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ③ 縣市養殖戶 H-Bar
+  // ──────────────────────────────────────
+  const cFrmSorted=[...counties].sort((a,b)=>CM[b].farmers-CM[a].farmers);
+  makeChart('c-county-farmers','bar',{
+    labels:cFrmSorted.map(c=>CODE2NAME[c]||c),
+    datasets:[{data:cFrmSorted.map(c=>CM[c].farmers),backgroundColor:PALETTE,borderRadius:4}]
+  },{
+    indexAxis:'y',
+    plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:'#64748b',font:{size:10},formatter:v=>fmt(v)+'戶'}},
+    scales:{
+      x:{grid:GRID,ticks:{...TICK,callback:v=>fmt(v)}},
+      y:{grid:{display:false},ticks:TICK}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ③ 縣市多樣性 Bar
+  // ──────────────────────────────────────
+  const cDivSorted=[...counties].sort((a,b)=>CM[b].diversity-CM[a].diversity);
+  makeChart('c-county-diversity','bar',{
+    labels:cDivSorted.map(c=>CODE2NAME[c]||c),
+    datasets:[{
+      data:cDivSorted.map(c=>CM[c].diversity),
+      backgroundColor:cDivSorted.map((_,i)=>PALETTE[i%PALETTE.length]),
+      borderRadius:4
+    }]
+  },{
+    plugins:{
+      legend:{display:false},
+      datalabels:{anchor:'end',align:'top',color:'#64748b',font:{size:11},formatter:v=>v+'種'}
+    },
+    scales:{
+      x:{grid:{display:false},ticks:TICK},
+      y:{grid:GRID,ticks:TICK,suggestedMax:species.length+1}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ③ 縣市在池量 H-Bar
+  // ──────────────────────────────────────
+  const cStkSorted=[...counties].sort((a,b)=>CM[b].stock-CM[a].stock);
+  makeChart('c-county-stock','bar',{
+    labels:cStkSorted.map(c=>CODE2NAME[c]||c),
+    datasets:[{data:cStkSorted.map(c=>CM[c].stock),backgroundColor:PALETTE,borderRadius:4}]
+  },{
+    indexAxis:'y',
+    plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:'#64748b',font:{size:10},formatter:v=>fmtShort(v)}},
+    scales:{
+      x:{grid:GRID,ticks:{...TICK,callback:v=>fmtShort(v)}},
+      y:{grid:{display:false},ticks:TICK}
+    }
+  });
+
+  // ──────────────────────────────────────
+  //  ④ 水權口數 Stacked
+  // ──────────────────────────────────────
+  makeChart('c-water-stack','bar',{
+    labels:species,
+    datasets:[
+      {label:'第一類(有水權)',data:species.map(s=>SM[s].w1y_ponds),backgroundColor:WATER_COLORS['第一類(有水權)'],borderRadius:2},
+      {label:'第一類(無水權)',data:species.map(s=>SM[s].w1n_ponds),backgroundColor:WATER_COLORS['第一類(無水權)'],borderRadius:2},
+      {label:'第二類',       data:species.map(s=>SM[s].w2_ponds), backgroundColor:WATER_COLORS['第二類'],       borderRadius:2},
+      {label:'第三類',       data:species.map(s=>SM[s].w3_ponds), backgroundColor:WATER_COLORS['第三類'],       borderRadius:2},
+    ]
+  },{
+    scales:{
+      x:{stacked:true,grid:{display:false},ticks:TICK},
+      y:{stacked:true,grid:GRID,ticks:{...TICK,callback:v=>fmtShort(v)}}
+    },
+    plugins:{legend:{labels:{color:'#94a3b8'}},datalabels:{display:false}}
+  });
+
+  // ──────────────────────────────────────
+  //  ④ 水權戶數 Stacked
+  // ──────────────────────────────────────
+  makeChart('c-water-farmer-stack','bar',{
+    labels:species,
+    datasets:[
+      {label:'第一類(有水權)',data:species.map(s=>SM[s].w1y_farmers),backgroundColor:WATER_COLORS['第一類(有水權)'],borderRadius:2},
+      {label:'第一類(無水權)',data:species.map(s=>SM[s].w1n_farmers),backgroundColor:WATER_COLORS['第一類(無水權)'],borderRadius:2},
+      {label:'第二類',       data:species.map(s=>SM[s].w2_farmers), backgroundColor:WATER_COLORS['第二類'],       borderRadius:2},
+      {label:'第三類',       data:species.map(s=>SM[s].w3_farmers), backgroundColor:WATER_COLORS['第三類'],       borderRadius:2},
+    ]
+  },{
+    scales:{
+      x:{stacked:true,grid:{display:false},ticks:TICK},
+      y:{stacked:true,grid:GRID,ticks:{...TICK,callback:v=>fmtShort(v)}}
+    },
+    plugins:{legend:{labels:{color:'#94a3b8'}},datalabels:{display:false}}
+  });
+
+  // ──────────────────────────────────────
+  //  ⑤ 熱力圖
+  // ──────────────────────────────────────
+  // Build matrix: species × county
+  const matrix={};
+  rows.forEach(r=>{
+    const s=r['魚種別'], c=r['所屬縣市'];
+    if(!matrix[s]) matrix[s]={};
+    matrix[s][c]=(matrix[s][c]||0)+num(r,'魚塭面積(公頃)-小計');
+  });
+  const maxVal=Math.max(...Object.values(matrix).flatMap(row=>Object.values(row)));
+
+  const tbl=document.getElementById('heatmap');
+  const hdr=document.createElement('tr');
+  hdr.innerHTML='<th>魚種 \\ 縣市</th>'+counties.map(c=>`<th>${CODE2NAME[c]||c}</th>`).join('');
+  const thead=document.createElement('thead');
+  thead.appendChild(hdr); tbl.appendChild(thead);
+  const tbody=document.createElement('tbody');
+  species.forEach(s=>{
+    const tr=document.createElement('tr');
+    let html=`<td class="row-lbl">${s}</td>`;
+    counties.forEach(c=>{
+      const v=matrix[s]?.[c]||0;
+      const bg=heatColor(v,maxVal);
+      const fg=v>maxVal*0.4?'#fff':'#94a3b8';
+      html+=`<td style="background:${bg};color:${fg}" title="${CODE2NAME[c]||c} × ${s}: ${fmt(v,1)} 公頃">${v?fmt(v,1):'-'}</td>`;
+    });
+    tr.innerHTML=html; tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+
+  // ──────────────────────────────────────
+  //  ⑥ 排行榜
+  // ──────────────────────────────────────
+  function rankBadge(i){ return `<span class="rank-badge ${i===0?'rb-gold':i===1?'rb-silver':i===2?'rb-bronze':'rb-other'}">${i+1}</span>`; }
+
+  // 魚種排行
+  const rankSpeciesEl=document.getElementById('rank-species');
+  rankSpeciesEl.innerHTML=`<thead><tr><th>排名</th><th>魚種</th><th>面積(公頃)</th><th>在池量</th><th>養殖戶</th></tr></thead>`;
+  const rtb1=document.createElement('tbody');
+  const maxAreaSp=SM[species[0]].area;
+  species.forEach((s,i)=>{
+    const tr=document.createElement('tr');
+    const pct=SM[s].area/maxAreaSp*100;
+    tr.innerHTML=`<td>${rankBadge(i)}</td>
+      <td>${s}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="bar-fill-wrap"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <span style="white-space:nowrap;color:#2dd4bf;font-weight:600">${fmt(SM[s].area,1)}</span>
+        </div>
+      </td>
+      <td>${fmtShort(SM[s].stock)}</td>
+      <td>${fmt(SM[s].farmers)}</td>`;
+    rtb1.appendChild(tr);
+  });
+  rankSpeciesEl.appendChild(rtb1);
+
+  // 縣市排行
+  const rankCountyEl=document.getElementById('rank-county');
+  rankCountyEl.innerHTML=`<thead><tr><th>排名</th><th>縣市</th><th>面積(公頃)</th><th>在池量</th><th>魚種數</th></tr></thead>`;
+  const rtb2=document.createElement('tbody');
+  const maxAreaCo=CM[counties[0]].area;
+  counties.forEach((c,i)=>{
+    const tr=document.createElement('tr');
+    const pct=CM[c].area/maxAreaCo*100;
+    tr.innerHTML=`<td>${rankBadge(i)}</td>
+      <td>${CODE2NAME[c]||c}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="bar-fill-wrap"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <span style="white-space:nowrap;color:#2dd4bf;font-weight:600">${fmt(CM[c].area,1)}</span>
+        </div>
+      </td>
+      <td>${fmtShort(CM[c].stock)}</td>
+      <td>${CM[c].diversity}</td>`;
+    rtb2.appendChild(tr);
+  });
+  rankCountyEl.appendChild(rtb2);
+
+  // 隱藏 Loading
+  document.getElementById('loading').style.display='none';
+}
+
+main().catch(err=>{
+  document.getElementById('loading').innerHTML=
+    `<div style="color:#f87171;text-align:center">⚠ 載入失敗<br><small style="color:#64748b">${err.message}</small><br><br>
+     <button onclick="location.reload()" style="padding:8px 18px;background:#0d7377;border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px">重試</button></div>`;
+});
+</script>
+</body>
+</html>
