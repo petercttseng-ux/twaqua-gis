@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>水產養殖 GIS 空間查詢系統</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+/* ══════════════════════════════════════
+   Reset & Base
+══════════════════════════════════════ */
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { height:100%; overflow:hidden; }
+body {
+  font-family:'Microsoft JhengHei','微軟正黑體',sans-serif;
+  background:#0f172a; color:#e2e8f0;
+  display:flex; flex-direction:column;
+}
+
+/* ══════════════════════════════════════
+   Header
+══════════════════════════════════════ */
+#header {
+  background:linear-gradient(135deg,#0f3460 0%,#16213e 100%);
+  padding:10px 20px;
+  display:flex; align-items:center; gap:12px;
+  border-bottom:2px solid #0d7377;
+  box-shadow:0 2px 12px rgba(0,0,0,.6);
+  z-index:1000; flex-shrink:0;
+}
+#header-logo {
+  height:44px; width:auto; border-radius:4px; flex-shrink:0;
+  object-fit:contain; background:#fff; padding:3px 5px;
+}
+#header-text h1 { font-size:18px; font-weight:700; color:#2dd4bf; white-space:nowrap; }
+#header-text .subtitle { font-size:11px; color:#64748b; margin-top:1px; }
+.header-stats { margin-left:auto; display:flex; gap:18px; flex-shrink:0; }
+.header-stat .hs-val { font-size:15px; font-weight:700; color:#2dd4bf; text-align:right; }
+.header-stat .hs-lbl { font-size:10px; color:#475569; text-align:right; }
+
+/* ══════════════════════════════════════
+   Main Layout (Desktop)
+══════════════════════════════════════ */
+#main { display:flex; flex:1; overflow:hidden; min-height:0; }
+
+/* ══════════════════════════════════════
+   Sidebar (Desktop)
+══════════════════════════════════════ */
+#sidebar {
+  width:300px; min-width:300px;
+  background:#0f172a;
+  border-right:1px solid #1e3a5f;
+  display:flex; flex-direction:column;
+  overflow:hidden; z-index:100;
+}
+/* hide handle on desktop */
+#sheet-handle { display:none; }
+/* hide mobile-only tab bar on desktop */
+#mob-tabs { display:none; }
+
+#sidebar-body {
+  flex:1; overflow-y:auto;
+  display:flex; flex-direction:column;
+}
+#sidebar-body::-webkit-scrollbar { width:4px; }
+#sidebar-body::-webkit-scrollbar-thumb { background:#1e3a5f; border-radius:2px; }
+
+.sb-section { padding:14px 16px; border-bottom:1px solid #1e2d47; flex-shrink:0; }
+.sb-section h3 {
+  font-size:11px; color:#2dd4bf; margin-bottom:10px;
+  text-transform:uppercase; letter-spacing:1.5px;
+}
+
+/* Controls */
+.ctrl-group { margin-bottom:10px; }
+.ctrl-group label { display:block; font-size:11px; color:#64748b; margin-bottom:5px; }
+.ctrl-group select {
+  width:100%; padding:9px 10px;
+  background:#1e293b; border:1px solid #334155;
+  border-radius:8px; color:#e2e8f0; font-size:13px;
+  cursor:pointer; outline:none; transition:border-color .2s;
+  -webkit-appearance:none; appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%2364748b'%3E%3Cpath d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 10px center;
+  padding-right:30px;
+}
+.ctrl-group select:focus { border-color:#2dd4bf; }
+
+.metric-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.m-btn {
+  padding:10px 6px; background:#1e293b;
+  border:1px solid #334155; border-radius:8px;
+  color:#94a3b8; font-size:12px; cursor:pointer;
+  text-align:center; transition:all .2s; line-height:1.3;
+  min-height:44px; display:flex; align-items:center; justify-content:center;
+}
+.m-btn:hover { border-color:#2dd4bf; color:#2dd4bf; }
+.m-btn.active {
+  background:linear-gradient(135deg,#0d7377,#0f766e);
+  border-color:#2dd4bf; color:#fff; font-weight:600;
+}
+
+/* Stat cards */
+.stat-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px; }
+.stat-card {
+  background:#1e293b; border-radius:8px; padding:10px 11px;
+  border:1px solid #1e3a5f; transition:border-color .2s;
+}
+.stat-card:hover { border-color:#2dd4bf; }
+.stat-card .sc-lbl { font-size:10px; color:#64748b; margin-bottom:3px; }
+.stat-card .sc-val { font-size:15px; font-weight:700; color:#2dd4bf; }
+.stat-card .sc-unit { font-size:10px; color:#475569; margin-top:1px; }
+
+/* County detail */
+#county-detail { padding:14px 16px; flex:1; }
+.detail-placeholder { font-size:12px; color:#334155; font-style:italic; text-align:center; padding:30px 10px; }
+.detail-placeholder .dp-icon { font-size:32px; margin-bottom:8px; }
+.d-county-name { font-size:17px; font-weight:700; color:#e2e8f0; margin-bottom:4px; }
+.d-summary { font-size:11px; color:#64748b; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #1e2d47; }
+.fish-item {
+  display:flex; align-items:center; padding:7px 0;
+  border-bottom:1px solid #1e2d47; gap:7px;
+}
+.fish-item .fi-name { font-size:12px; color:#cbd5e1; min-width:72px; }
+.fi-bar-wrap { flex:1; background:#1e2d47; border-radius:3px; height:7px; overflow:hidden; }
+.fi-bar { height:100%; background:linear-gradient(90deg,#0d7377,#2dd4bf); border-radius:3px; transition:width .6s ease; }
+.fish-item .fi-val { font-size:11px; color:#64748b; min-width:55px; text-align:right; }
+.rank-badge {
+  width:20px; height:20px; border-radius:50%;
+  background:#0d7377; color:#fff; font-size:9px; font-weight:700;
+  line-height:20px; text-align:center; flex-shrink:0;
+}
+.rank-badge.gold   { background:#b7791f; }
+.rank-badge.silver { background:#6b7280; }
+.rank-badge.bronze { background:#92400e; }
+
+/* ══════════════════════════════════════
+   Map
+══════════════════════════════════════ */
+#map-wrap { flex:1; position:relative; min-width:0; }
+#map { width:100%; height:100%; background:#0a0f1e; }
+.leaflet-container { background:#0a0f1e !important; }
+
+/* Tooltip */
+.map-tooltip {
+  background:rgba(15,23,42,.96) !important;
+  border:1px solid #0d7377 !important;
+  border-radius:8px !important;
+  padding:10px 13px !important;
+  font-size:12px; color:#e2e8f0;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);
+  pointer-events:none;
+}
+.map-tooltip .tt-name { font-size:14px; font-weight:700; color:#2dd4bf; margin-bottom:5px; }
+.map-tooltip .tt-row { display:flex; justify-content:space-between; gap:14px; font-size:11px; }
+.map-tooltip .tt-lbl { color:#64748b; }
+.map-tooltip .tt-val { color:#e2e8f0; font-weight:600; }
+
+/* Legend */
+#legend {
+  position:absolute; bottom:28px; right:8px;
+  background:rgba(15,23,42,.94); border:1px solid #1e3a5f;
+  border-radius:8px; padding:10px 12px; z-index:400; min-width:150px;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);
+  transition:bottom .35s ease;
+}
+#legend h4 { font-size:11px; color:#2dd4bf; margin-bottom:7px; text-transform:uppercase; letter-spacing:1px; }
+.leg-item { display:flex; align-items:center; gap:7px; margin-bottom:4px; font-size:11px; color:#94a3b8; }
+.leg-color { width:20px; height:11px; border-radius:3px; flex-shrink:0; }
+
+/* FAB (mobile toggle) */
+#fab {
+  display:none;
+  position:absolute; bottom:20px; left:50%;
+  transform:translateX(-50%);
+  z-index:450;
+  background:linear-gradient(135deg,#0d7377,#0f766e);
+  color:#fff; border:none; border-radius:24px;
+  padding:10px 22px; font-size:14px; font-weight:600;
+  cursor:pointer; box-shadow:0 4px 16px rgba(13,115,119,.5);
+  white-space:nowrap;
+  transition:all .2s;
+}
+#fab:active { transform:translateX(-50%) scale(.95); }
+
+/* Loading */
+#loading {
+  position:absolute; inset:0;
+  background:rgba(10,15,30,.85);
+  display:flex; align-items:center; justify-content:center;
+  z-index:2000; flex-direction:column; gap:12px;
+}
+.spinner {
+  width:44px; height:44px;
+  border:4px solid #1e293b; border-top-color:#2dd4bf;
+  border-radius:50%; animation:spin .7s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { color:#2dd4bf; font-size:13px; }
+.error-box { padding:20px; text-align:center; color:#f87171; font-size:13px; }
+
+/* Scale bar */
+.leaflet-control-scale-line { background:rgba(15,23,42,.8); border-color:#1e3a5f; color:#64748b; font-size:10px; }
+
+
+/* ══════════════════════════════════════
+   TABLET  (≤ 1024px)
+══════════════════════════════════════ */
+@media (max-width:1024px) {
+  #sidebar { width:260px; min-width:260px; }
+  .header-stats { gap:12px; }
+}
+
+/* ══════════════════════════════════════
+   MOBILE  (≤ 767px)
+══════════════════════════════════════ */
+@media (max-width:767px) {
+
+  /* ── Header compact ── */
+  #header { padding:7px 12px; gap:8px; }
+  #header-logo { height:34px; }
+  #header-text h1 { font-size:14px; }
+  #header-text .subtitle { display:none; }
+  .header-stats { gap:10px; }
+  .header-stat .hs-val { font-size:13px; }
+  .header-stat .hs-lbl { font-size:9px; }
+
+  /* ── Layout: column ── */
+  #main { flex-direction:column; position:relative; }
+
+  /* ── Map: upper portion ── */
+  #map-wrap { height:100%; flex:1; }
+
+  /* ── FAB ── */
+  #fab { display:flex; align-items:center; gap:6px; }
+
+  /* ── Legend: lifted above FAB/sheet ── */
+  #legend { bottom:8px; right:8px; min-width:130px; padding:8px 10px; }
+  #legend.lifted { bottom:64px; }
+
+  /* ── Sidebar → Bottom Sheet ── */
+  #sidebar {
+    position:fixed;
+    bottom:0; left:0; right:0;
+    width:100%; min-width:0;
+    max-height:82vh;
+    border-right:none;
+    border-top:none;
+    border-radius:18px 18px 0 0;
+    box-shadow:0 -6px 32px rgba(0,0,0,.6);
+    z-index:500;
+    transform:translateY(calc(100% - 48px));
+    transition:transform .38s cubic-bezier(.4,0,.2,1);
+    overflow:hidden;
+  }
+  #sidebar.sheet-open {
+    transform:translateY(0);
+  }
+
+  /* ── Drag Handle ── */
+  #sheet-handle {
+    display:flex; flex-direction:column; align-items:center;
+    padding:10px 0 6px; cursor:pointer; flex-shrink:0;
+    background:#0f172a; border-radius:18px 18px 0 0;
+    border-top:1px solid #0d7377;
+  }
+  #sheet-handle .handle-bar {
+    width:36px; height:4px; background:#334155; border-radius:2px; margin-bottom:6px;
+  }
+
+  /* ── Mobile tab bar ── */
+  #mob-tabs {
+    display:flex; background:#0f172a;
+    border-bottom:1px solid #1e2d47; flex-shrink:0;
+  }
+  .mob-tab {
+    flex:1; padding:10px 4px; background:none; border:none;
+    color:#64748b; font-size:12px; cursor:pointer;
+    border-bottom:2px solid transparent; transition:all .2s;
+    font-family:inherit; display:flex; flex-direction:column;
+    align-items:center; gap:2px;
+  }
+  .mob-tab .tab-icon { font-size:16px; }
+  .mob-tab.active { color:#2dd4bf; border-bottom-color:#2dd4bf; }
+
+  /* ── Tab panes ── */
+  #sidebar-body { overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .tab-pane { display:none; }
+  .tab-pane.active { display:block; }
+
+  /* ── Bigger touch targets ── */
+  .m-btn { min-height:48px; font-size:13px; }
+  .ctrl-group select { padding:11px 30px 11px 12px; font-size:14px; }
+  .stat-card .sc-val { font-size:17px; }
+  .fish-item { padding:9px 0; }
+  .fish-item .fi-name { font-size:13px; }
+}
+
+/* ══════════════════════════════════════
+   Very small (≤ 375px)
+══════════════════════════════════════ */
+@media (max-width:375px) {
+  #header-text h1 { font-size:12px; }
+  .header-stats { gap:6px; }
+  .header-stat .hs-val { font-size:12px; }
+  .mob-tab { font-size:11px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══ Header ══ -->
+<div id="header">
+  <img id="header-logo"
+       src="https://www.tfrin.gov.tw/upload/tfrin/images/web_structure/174/fb098551-7645-457b-a0b4-18e74c6c14ea.jpg"
+       alt="農業部水產試驗所"
+       onerror="this.style.display='none'">
+  <div id="header-text">
+    <h1>水產養殖 GIS 空間查詢系統</h1>
+    <div class="subtitle">農業部水產試驗所 ｜ 養殖漁業資源調查資料 FaRSS139</div>
+  </div>
+  <div class="header-stats">
+    <div class="header-stat">
+      <div class="hs-val" id="h-counties">-</div>
+      <div class="hs-lbl">養殖縣市</div>
+    </div>
+    <div class="header-stat">
+      <div class="hs-val" id="h-species">-</div>
+      <div class="hs-lbl">養殖魚種</div>
+    </div>
+    <div class="header-stat">
+      <div class="hs-val" id="h-records">-</div>
+      <div class="hs-lbl">資料筆數</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Main ══ -->
+<div id="main">
+
+  <!-- ── Sidebar / Bottom Sheet ── -->
+  <div id="sidebar">
+
+    <!-- Mobile: drag handle -->
+    <div id="sheet-handle" role="button" aria-label="展開面板">
+      <div class="handle-bar"></div>
+    </div>
+
+    <!-- Mobile: tab bar -->
+    <div id="mob-tabs">
+      <button class="mob-tab active" data-tab="filter">
+        <span class="tab-icon">🔍</span>篩選
+      </button>
+      <button class="mob-tab" data-tab="stats">
+        <span class="tab-icon">📊</span>統計
+      </button>
+      <button class="mob-tab" data-tab="detail">
+        <span class="tab-icon">📍</span>詳情
+      </button>
+    </div>
+
+    <!-- Scrollable body -->
+    <div id="sidebar-body">
+
+      <!-- 篩選 (filter pane) -->
+      <div class="tab-pane active" id="pane-filter">
+        <div class="sb-section">
+          <h3>資料篩選</h3>
+          <div class="ctrl-group">
+            <label>魚種別</label>
+            <select id="fish-select">
+              <option value="all">全部魚種（合計）</option>
+            </select>
+          </div>
+          <div class="ctrl-group">
+            <label>地圖顯示指標</label>
+            <div class="metric-grid">
+              <button class="m-btn active" data-metric="魚塭面積(公頃)-小計">🗺 魚塭面積</button>
+              <button class="m-btn" data-metric="已完成調查魚塭口數-小計">🏊 魚塭口數</button>
+              <button class="m-btn" data-metric="放養量-在池(尾、粒、隻)">🐠 在池數量</button>
+              <button class="m-btn" data-metric="養殖戶數-小計">👨‍🌾 養殖戶數</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 統計 (stats pane) -->
+      <div class="tab-pane" id="pane-stats">
+        <div class="sb-section">
+          <h3>全臺統計 <span id="fish-badge"></span></h3>
+          <div class="stat-row">
+            <div class="stat-card">
+              <div class="sc-lbl">總魚塭面積</div>
+              <div class="sc-val" id="s-area">-</div>
+              <div class="sc-unit">公頃</div>
+            </div>
+            <div class="stat-card">
+              <div class="sc-lbl">總魚塭口數</div>
+              <div class="sc-val" id="s-ponds">-</div>
+              <div class="sc-unit">口</div>
+            </div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-card">
+              <div class="sc-lbl">總養殖戶數</div>
+              <div class="sc-val" id="s-farmers">-</div>
+              <div class="sc-unit">戶</div>
+            </div>
+            <div class="stat-card">
+              <div class="sc-lbl">在池總數量</div>
+              <div class="sc-val" id="s-stock">-</div>
+              <div class="sc-unit">萬尾/粒/隻</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 詳情 (detail pane) -->
+      <div class="tab-pane" id="pane-detail">
+        <div id="county-detail">
+          <div class="detail-placeholder" id="dp">
+            <div class="dp-icon">🗺</div>
+            點擊地圖上的縣市<br>查看詳細養殖資料
+          </div>
+          <div id="dc" style="display:none"></div>
+        </div>
+      </div>
+
+    </div><!-- /sidebar-body -->
+  </div><!-- /sidebar -->
+
+  <!-- ── Map ── -->
+  <div id="map-wrap">
+    <div id="map"></div>
+
+    <!-- Mobile FAB -->
+    <button id="fab" aria-label="開啟篩選面板">
+      <span id="fab-icon">☰</span>
+      <span id="fab-label">篩選 / 統計</span>
+    </button>
+
+    <!-- Legend -->
+    <div id="legend">
+      <h4 id="leg-title">魚塭面積（公頃）</h4>
+      <div id="leg-items"></div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">載入地圖與養殖資料中…</div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- Backdrop -->
+<div id="backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:490;" ></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ══════════════════════════════════════════
+//  常數 & 設定
+// ══════════════════════════════════════════
+const API_URL = 'https://data.moa.gov.tw/Service/OpenData/FaRss/FaRSS139.aspx?IsTransData=1&UnitId=G70';
+const GEO_URL = 'https://raw.githubusercontent.com/g0v/twgeojson/master/json/twCounty2010.geo.json';
+
+const CODE2NAME = {
+  '63000':'臺北市','65000':'新北市','66000':'臺中市',
+  '67000':'臺南市','68000':'桃園市','64000':'高雄市',
+  '10002':'宜蘭縣','10004':'新竹縣','10005':'苗栗縣',
+  '10007':'彰化縣','10008':'南投縣','10009':'雲林縣',
+  '10010':'嘉義縣','10013':'屏東縣','10014':'臺東縣',
+  '10015':'花蓮縣','10016':'澎湖縣','10017':'基隆市',
+  '10018':'新竹市','10020':'嘉義市','09007':'金門縣','09020':'連江縣'
+};
+const NAME2CODE = {};
+Object.entries(CODE2NAME).forEach(([k,v]) => {
+  NAME2CODE[v] = k;
+  NAME2CODE[v.replace('臺','台')] = k;
+  NAME2CODE[v.replace('台','臺')] = k;
+});
+
+const METRICS = {
+  '魚塭面積(公頃)-小計':       { label:'魚塭面積', unit:'公頃',    fmt:1 },
+  '已完成調查魚塭口數-小計':   { label:'魚塭口數', unit:'口',      fmt:0 },
+  '放養量-在池(尾、粒、隻)':   { label:'在池數量', unit:'尾/粒/隻',fmt:0 },
+  '養殖戶數-小計':             { label:'養殖戶數', unit:'戶',      fmt:0 }
+};
+
+const COLORS = ['#081d58','#253494','#225ea8','#1d91c0','#41b6c4','#7fcdbb','#c7e9b4','#ffffcc'].reverse();
+
+// ══════════════════════════════════════════
+//  狀態
+// ══════════════════════════════════════════
+let rawData = [], selectedMetric = '魚塭面積(公頃)-小計', selectedFish = 'all';
+let countySum = {}, countyRows = {}, geoLayer = null, breakValues = [];
+let isMobile = () => window.innerWidth <= 767;
+let sheetOpen = false;
+
+// ══════════════════════════════════════════
+//  Bottom-Sheet (Mobile)
+// ══════════════════════════════════════════
+const sidebar   = document.getElementById('sidebar');
+const backdrop  = document.getElementById('backdrop');
+const fab       = document.getElementById('fab');
+const fabLabel  = document.getElementById('fab-label');
+const fabIcon   = document.getElementById('fab-icon');
+const legend    = document.getElementById('legend');
+
+function openSheet() {
+  sheetOpen = true;
+  sidebar.classList.add('sheet-open');
+  backdrop.style.display = 'block';
+  fab.style.display = 'none';
+  legend.classList.add('lifted');
+}
+function closeSheet() {
+  sheetOpen = false;
+  sidebar.classList.remove('sheet-open');
+  backdrop.style.display = 'none';
+  fab.style.display = isMobile() ? 'flex' : 'none';
+  legend.classList.remove('lifted');
+}
+
+document.getElementById('sheet-handle').addEventListener('click', () => {
+  sheetOpen ? closeSheet() : openSheet();
+});
+fab.addEventListener('click', openSheet);
+backdrop.addEventListener('click', closeSheet);
+
+// ── Mobile tab switching ──
+document.querySelectorAll('.mob-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.mob-tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+    document.getElementById('pane-'+tab).classList.add('active');
+  });
+});
+
+// ══════════════════════════════════════════
+//  地圖初始化
+// ══════════════════════════════════════════
+const map = L.map('map',{
+  center:[23.5,121], zoom:7,
+  zoomControl:true, attributionControl:false,
+  tap:true   // ensure touch events work on iOS
+});
+
+// Move zoom control to bottom-right to avoid overlap on mobile
+map.zoomControl.setPosition('bottomright');
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{
+  subdomains:'abcd', maxZoom:19
+}).addTo(map);
+L.control.attribution({ prefix:'資料來源：農業部開放資料平臺 | CartoDB' }).addTo(map);
+L.control.scale({ imperial:false, position:'bottomleft' }).addTo(map);
+
+// Resize map after window resize
+window.addEventListener('resize', () => {
+  map.invalidateSize();
+  if (!isMobile() && sheetOpen) closeSheet();
+  fab.style.display = isMobile() ? 'flex' : 'none';
+});
+
+// ══════════════════════════════════════════
+//  工具函數
+// ══════════════════════════════════════════
+function fmt(n, dec=0) {
+  if (n===null||n===undefined||isNaN(n)) return '-';
+  return Number(n).toLocaleString('zh-TW',{maximumFractionDigits:dec,minimumFractionDigits:dec});
+}
+function fmtShort(n) {
+  if (!n) return '0';
+  if (n>=1e8) return (n/1e8).toFixed(1)+'億';
+  if (n>=1e4) return (n/1e4).toFixed(1)+'萬';
+  return fmt(n,1);
+}
+function quantile(arr, q) {
+  const s=[...arr].sort((a,b)=>a-b); return s[Math.floor(s.length*q)]??0;
+}
+function computeBreaks(values) {
+  const pos=values.filter(v=>v>0);
+  if (!pos.length) return [0,1];
+  return [...new Set([0,.143,.286,.429,.571,.714,.857,1].map(q=>quantile(pos,q)))].sort((a,b)=>a-b);
+}
+function getColor(val, breaks) {
+  if (!val||val===0) return '#0a0f1e';
+  for (let i=breaks.length-1;i>=0;i--) if(val>=breaks[i]) return COLORS[Math.min(i,COLORS.length-1)];
+  return COLORS[0];
+}
+function getFeatureCode(props) {
+  const id=props.COUNTYID||props.id||props.COUNTY_ID;
+  if (id) return String(id).padStart(5,'0');
+  const name=props.COUNTYNAME||props.name||props.NAME||props.COUNTY_NAME||'';
+  return NAME2CODE[name]||NAME2CODE[name.replace('台','臺')]||null;
+}
+
+// ══════════════════════════════════════════
+//  資料處理
+// ══════════════════════════════════════════
+function processData() {
+  countySum={}; countyRows={};
+  const rows=selectedFish==='all'?rawData:rawData.filter(d=>d['魚種別']===selectedFish);
+  rows.forEach(r=>{
+    const code=r['所屬縣市'];
+    if(!countyRows[code]) countyRows[code]=[];
+    countyRows[code].push(r);
+    countySum[code]=(countySum[code]||0)+(parseFloat(r[selectedMetric])||0);
+  });
+  breakValues=computeBreaks(Object.values(countySum));
+}
+
+function updateStats() {
+  const rows=selectedFish==='all'?rawData:rawData.filter(d=>d['魚種別']===selectedFish);
+  const sum=k=>rows.reduce((s,d)=>s+(parseFloat(d[k])||0),0);
+  document.getElementById('s-area').textContent    = fmt(sum('魚塭面積(公頃)-小計'),1);
+  document.getElementById('s-ponds').textContent   = fmt(sum('已完成調查魚塭口數-小計'));
+  document.getElementById('s-farmers').textContent = fmt(sum('養殖戶數-小計'));
+  document.getElementById('s-stock').textContent   = fmt(sum('放養量-在池(尾、粒、隻)')/1e4,1);
+  document.getElementById('fish-badge').innerHTML  =
+    selectedFish!=='all'
+    ? `<span style="background:#0d7377;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-style:normal">${selectedFish}</span>` : '';
+}
+
+// ══════════════════════════════════════════
+//  地圖渲染
+// ══════════════════════════════════════════
+function styleFeature(feature) {
+  const code=getFeatureCode(feature.properties), val=countySum[code]||0;
+  return { fillColor:getColor(val,breakValues), fillOpacity:val>0?.80:.15,
+           color:'#2dd4bf', weight:.8, opacity:.5 };
+}
+
+function renderGeo(geoData) {
+  if (geoLayer) geoLayer.remove();
+  geoLayer = L.geoJSON(geoData, {
+    style: styleFeature,
+    onEachFeature(feature, layer) {
+      const code=getFeatureCode(feature.properties);
+      const countyName=feature.properties.COUNTYNAME||feature.properties.name||CODE2NAME[code]||'未知';
+      const m=METRICS[selectedMetric];
+      layer.on({
+        mouseover(e) {
+          if (isMobile()) return; // skip hover tooltip on touch
+          e.target.setStyle({weight:2.5,color:'#ffffff',fillOpacity:.90});
+          e.target.bringToFront();
+          const val=countySum[code]||0;
+          const rows=countyRows[code]||[];
+          const area=rows.reduce((s,d)=>s+(parseFloat(d['魚塭面積(公頃)-小計'])||0),0);
+          const fmrs=rows.reduce((s,d)=>s+(parseFloat(d['養殖戶數-小計'])||0),0);
+          const sp=new Set(rows.map(d=>d['魚種別'])).size;
+          e.target.bindTooltip(`
+            <div class="map-tooltip">
+              <div class="tt-name">${countyName}</div>
+              <div class="tt-row"><span class="tt-lbl">${m.label}</span><span class="tt-val">${fmt(val,m.fmt)} ${m.unit}</span></div>
+              <div class="tt-row"><span class="tt-lbl">魚塭面積</span><span class="tt-val">${fmt(area,1)} 公頃</span></div>
+              <div class="tt-row"><span class="tt-lbl">養殖戶數</span><span class="tt-val">${fmt(fmrs)} 戶</span></div>
+              <div class="tt-row"><span class="tt-lbl">養殖魚種</span><span class="tt-val">${sp} 種</span></div>
+            </div>
+          `,{sticky:true,className:'',opacity:1}).openTooltip();
+        },
+        mouseout(e) { if(!isMobile()){geoLayer.resetStyle(e.target);e.target.closeTooltip();} },
+        click() {
+          if (isMobile()) geoLayer.resetStyle(layer);
+          showDetail(code, countyName);
+        }
+      });
+    }
+  }).addTo(map);
+  updateLegend();
+}
+
+function refreshStyles() {
+  if (!geoLayer) return;
+  geoLayer.eachLayer(l=>geoLayer.resetStyle(l));
+  updateLegend();
+}
+
+function updateLegend() {
+  const m=METRICS[selectedMetric];
+  document.getElementById('leg-title').textContent=m.label+'（'+m.unit+'）';
+  const el=document.getElementById('leg-items'); el.innerHTML='';
+  const n=Math.min(breakValues.length-1,COLORS.length);
+  for(let i=0;i<n;i++){
+    const lo=breakValues[i],hi=breakValues[i+1];
+    if(lo===undefined||hi===undefined||lo===hi) continue;
+    const d=document.createElement('div'); d.className='leg-item';
+    d.innerHTML=`<div class="leg-color" style="background:${COLORS[i]}"></div><span>${fmtShort(lo)} – ${fmtShort(hi)}</span>`;
+    el.appendChild(d);
+  }
+  const nd=document.createElement('div'); nd.className='leg-item';
+  nd.innerHTML=`<div class="leg-color" style="background:#0a0f1e;border:1px solid #1e3a5f"></div><span>無資料</span>`;
+  el.appendChild(nd);
+}
+
+// ══════════════════════════════════════════
+//  縣市詳情
+// ══════════════════════════════════════════
+function showDetail(code, countyName) {
+  // On mobile: switch to detail tab and open sheet
+  if (isMobile()) {
+    document.querySelectorAll('.mob-tab').forEach(b=>b.classList.remove('active'));
+    document.querySelector('[data-tab="detail"]').classList.add('active');
+    document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+    document.getElementById('pane-detail').classList.add('active');
+    openSheet();
+  }
+
+  document.getElementById('dp').style.display='none';
+  const dc=document.getElementById('dc'); dc.style.display='block';
+
+  const rows=countyRows[code]||[];
+  if(!rows.length){
+    dc.innerHTML=`<div class="d-county-name">${countyName}</div><div class="d-summary">此縣市目前無養殖資料</div>`;
+    return;
+  }
+
+  const m=METRICS[selectedMetric];
+  const sorted=[...rows].sort((a,b)=>(parseFloat(b[selectedMetric])||0)-(parseFloat(a[selectedMetric])||0));
+  const maxVal=parseFloat(sorted[0][selectedMetric])||1;
+  const total=sorted.reduce((s,d)=>s+(parseFloat(d[selectedMetric])||0),0);
+  const area=rows.reduce((s,d)=>s+(parseFloat(d['魚塭面積(公頃)-小計'])||0),0);
+  const ponds=rows.reduce((s,d)=>s+(parseFloat(d['已完成調查魚塭口數-小計'])||0),0);
+  const farmers=rows.reduce((s,d)=>s+(parseFloat(d['養殖戶數-小計'])||0),0);
+  const stock=rows.reduce((s,d)=>s+(parseFloat(d['放養量-在池(尾、粒、隻)'])||0),0);
+
+  let html=`
+    <div class="d-county-name">${countyName}</div>
+    <div class="d-summary">
+      共 <strong style="color:#2dd4bf">${rows.length}</strong> 種魚種 ｜
+      ${m.label}合計：<strong style="color:#2dd4bf">${fmt(total,m.fmt)}</strong> ${m.unit}
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="sc-lbl">魚塭面積</div><div class="sc-val">${fmt(area,1)}</div><div class="sc-unit">公頃</div></div>
+      <div class="stat-card"><div class="sc-lbl">魚塭口數</div><div class="sc-val">${fmt(ponds)}</div><div class="sc-unit">口</div></div>
+      <div class="stat-card"><div class="sc-lbl">養殖戶數</div><div class="sc-val">${fmt(farmers)}</div><div class="sc-unit">戶</div></div>
+      <div class="stat-card"><div class="sc-lbl">在池數量</div><div class="sc-val">${fmt(stock/1e4,1)}</div><div class="sc-unit">萬尾/粒/隻</div></div>
+    </div>
+    <div class="sb-section" style="padding:10px 0 4px;margin-top:8px">
+      <h3 style="margin-bottom:8px">${m.label} 排行（${m.unit}）</h3>
+    </div><div>`;
+
+  sorted.forEach((r,i)=>{
+    const val=parseFloat(r[selectedMetric])||0;
+    const pct=maxVal>0?(val/maxVal*100).toFixed(1):0;
+    const rc=i===0?'gold':i===1?'silver':i===2?'bronze':'';
+    html+=`<div class="fish-item">
+      <div class="rank-badge ${rc}">${i+1}</div>
+      <div class="fi-name">${r['魚種別']}</div>
+      <div class="fi-bar-wrap"><div class="fi-bar" style="width:${pct}%"></div></div>
+      <div class="fi-val">${fmt(val,m.fmt)}</div>
+    </div>`;
+  });
+  html+=`</div>`;
+  dc.innerHTML=html;
+  // scroll to top of detail pane
+  document.getElementById('pane-detail').scrollTop=0;
+}
+
+// ══════════════════════════════════════════
+//  事件監聽
+// ══════════════════════════════════════════
+document.getElementById('fish-select').addEventListener('change', function() {
+  selectedFish=this.value; processData(); refreshStyles(); updateStats(); resetDetail();
+});
+
+document.querySelectorAll('.m-btn').forEach(btn=>{
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('.m-btn').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+    selectedMetric=this.dataset.metric;
+    processData(); refreshStyles(); updateStats(); resetDetail();
+  });
+});
+
+function resetDetail() {
+  document.getElementById('dp').style.display='block';
+  document.getElementById('dc').style.display='none';
+}
+
+// ══════════════════════════════════════════
+//  資料載入
+// ══════════════════════════════════════════
+async function init() {
+  try {
+    const [apiRes,geoRes]=await Promise.all([fetch(API_URL),fetch(GEO_URL)]);
+    if(!apiRes.ok) throw new Error('API 回應錯誤：'+apiRes.status);
+    if(!geoRes.ok) throw new Error('GeoJSON 載入失敗：'+geoRes.status);
+    rawData=await apiRes.json();
+    const geoData=await geoRes.json();
+
+    const species=[...new Set(rawData.map(d=>d['魚種別']))].sort();
+    const sel=document.getElementById('fish-select');
+    species.forEach(f=>{const o=document.createElement('option');o.value=f;o.textContent=f;sel.appendChild(o);});
+
+    const counties=new Set(rawData.map(d=>d['所屬縣市'])).size;
+    document.getElementById('h-counties').textContent=counties;
+    document.getElementById('h-species').textContent=species.length;
+    document.getElementById('h-records').textContent=rawData.length;
+
+    processData(); renderGeo(geoData); updateStats();
+
+    document.getElementById('loading').style.display='none';
+    // Show FAB if mobile
+    if (isMobile()) fab.style.display='flex';
+  } catch(err) {
+    console.error(err);
+    document.getElementById('loading').innerHTML=
+      `<div class="error-box">⚠ 資料載入失敗<br><small style="color:#94a3b8">${err.message}</small><br><br>
+       <button onclick="location.reload()" style="margin-top:8px;padding:10px 20px;background:#0d7377;border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:14px">重新載入</button></div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
