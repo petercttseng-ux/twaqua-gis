@@ -577,11 +577,13 @@ const baseLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/
 const baseSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{
   maxZoom:19, attribution:'© Esri, Maxar, Earthstar Geographics'
 });
-const labelOverlay = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',{
-  subdomains:'abcd', maxZoom:19, pane:'shadowPane'
+const labelOverlay = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP5/default/GoogleMapsCompatible/{z}/{y}/{x}',{
+  maxZoom:20, opacity:.6, pane:'shadowPane',
+  attribution:'© 國土測繪中心'
 });
 
-baseLight.addTo(map);
+baseSatellite.addTo(map);
+labelOverlay.addTo(map);
 
 L.control.layers(
   { '🗺 亮色底圖': baseLight, '🛰 衛星影像': baseSatellite },
